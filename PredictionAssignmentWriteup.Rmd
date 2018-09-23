@@ -1,0 +1,122 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Anita Windisch"
+date: "September 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project and Data Set Overview
+
+The goal of this assignment is to predict the manner in which peolpe did their exercise. This is the **classe** variable in the training set. Using devices such like Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+Furthermore citing the authors' webpage we have: "Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E)."
+
+## Working With The Data Set and Modeling
+
+In the first part of this project we try to predict the manner in which the participants did the exercise. After that, in the second part we use the prediction model to predict 20 different test cases.
+
+To get started I am loading the training data set:
+```{r,eval=TRUE,echo=TRUE}
+dataTrain<-read.csv("/home/anita/mycourses/DataScienceSpecialization/PracticalMachineLearning/pml-training.csv",
+header = TRUE, sep=",")
+dim(dataTrain)
+str(dataTrain[,1:30])
+```
+Looking at the variables in the data set (partially displayed) we can see that many of those have plenty of **NAs** and **blank values**. That`s why the next step is to clean the data.
+```{r,eval=TRUE,echo=TRUE}
+# Looking for the index of the columns which have at least 70% of NA and blank values.
+index<-which(colSums(is.na(dataTrain)|dataTrain=="")>0.7)
+# Taking this columns out of the data set.
+dataCleanTrain<-dataTrain[,-index]
+# The first 7 columns are irrelevant for the model: user name and several time stamps. 
+dataCleanTrain<-dataCleanTrain[,-c(1:7)]
+# New dimension of the data set with fewer variables
+dim(dataCleanTrain)
+str(dataCleanTrain[,1:30])
+```
+After cleaning the data set we are going to the next step which regards partitioning of the data set.
+```{r, eval=TRUE,echo=TRUE}
+library(caret) # Loading needed library
+set.seed(2018) # Set random seed
+# Make a partition of the data: 60% Train and 40% Test
+Training<-createDataPartition(dataCleanTrain$classe,p=0.6,list=FALSE)
+Train<-dataCleanTrain[Training,]
+Test<-dataCleanTrain[-Training,]
+# Dimensions
+dim(Train)
+dim(Test)
+```
+
+## Model Testing
+
+With the partitions ready to work with, we start by testing 2 different prediction models: **Predicting with trees** and **Random forest**. To improve the effeciency of the models and also to reduce overfitting, we will use the **cross validation** method. Thats why we define the **trainControl()** function as **trainControl(method="cv", number=5)** where **method** is set as **cross validation** with **number of folds** equals **5**. 
+```{r,eval=TRUE,echo=TRUE}
+trconFun<-trainControl(method="cv", number=5) # Explanation above!
+```
+
+### 1. Predicting with Trees
+
+```{r,eval=TRUE,echo=TRUE}
+library(rattle)
+# Training our model
+model_trees<-train(classe~., data=Train, method="rpart", trControl=trconFun)
+# Plot the final model
+fancyRpartPlot(model_trees$finalModel)
+# Predicting 
+prediction_withTrees<-predict(model_trees, newdata=Test)
+# Calculating confusion matrix 
+confMatr1<-confusionMatrix(Test$classe,prediction_withTrees)
+confMatr1$overall[1] # Extracting the accuracy percentage for the model
+
+```
+The accuracy for this model is about **55%** which is not very good. That means that the outcome (**classe**) is not good predicted by the other predictors.
+
+### 2. Predicting with Random Forest
+
+```{r,eval=TRUE, echo=TRUE}
+# Training the model
+model_randforest<-train(classe~., data=Train, ntree=10, method="rf",trControl=trconFun, verbose=FALSE)
+# Displying the final model
+model_randforest$finalModel
+# Plotting the final model
+plot(model_randforest$finalModel)
+# Predicting with Random Forest
+prediction_withRandForest<-predict(model_randforest, newdata=Test)
+# Calculating confusion matrix
+confMatr2<-confusionMatrix(Test$classe,prediction_withRandForest)
+confMatr2$overall[1] # Extracting the accuracy percentage for the model
+```
+With the **Random Forest** model the accuracy of the prediction process is way better. I trained my random forest model only with **ntree=10** and my final model has a **99%** accuracy with only **27 predictors** (**mtry** is the number of predictors). The error rate is also low, only **4%**, which is good.
+
+Comparing the 2 tested models the optimal model for our case is the **Random Forest Model**.
+
+## Using predicting model to predict 20 different test cases
+
+In this second and final part of the project we take our random forest model from above and predict 20 different cases. 
+First, we are taking a look at this data set.
+```{r,eval=TRUE, echo=TRUE}
+dataTest<-read.csv("/home/anita/mycourses/DataScienceSpecialization/PracticalMachineLearning/pml-testing.csv")
+dim(dataTest)
+str(dataTest[,1:20])
+```
+Once again we have to clean the data in oder to work with it. I am repeating the process from above.
+```{r,eval=TRUE,echo=TRUE}
+# Looking for the index of the columns which have at least 70% of NA and blank values.
+index<-which(colSums(is.na(dataTest)|dataTest=="")>0.7)
+# Taking this columns out of the data set.
+dataCleanTest<-dataTest[,-index]
+# The first 6 columns are irrelevant for the model: user name and several time stamps. 
+dataCleanTest<-dataCleanTest[,-c(1:6)]
+# New dimension of the data set with fewer variables
+dim(dataCleanTest)
+str(dataCleanTest[,1:20])
+```
+Now I am making the prediction for the 20 different cases:
+```{r,eval=TRUE,echo=TRUE}
+model<-predict(model_randforest, newdata=dataCleanTest)
+print(model)
+```
